@@ -6,13 +6,13 @@ from .fetcher import current_data
 async def streamer():
     while True:
         # Make a copy to avoid any threading issues
-        data_snapshot = dict(current_data)
+        data_snapshot = {"cities": dict(current_data)}
         yield f"data: {json.dumps(data_snapshot)}\n\n"
-        await asyncio.sleep(5)  # Match the fetcher's 5-second interval
+        await asyncio.sleep(2)  # Match the fetcher's 2-second interval
 
 def sse():
     return StreamingResponse(
-        streamer(), 
+        streamer(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
