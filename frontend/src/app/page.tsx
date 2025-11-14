@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Cloud, Droplets, Thermometer, Plus, X } from "lucide-react";
+import { Cloud, Droplets, Thermometer, Plus, X, Star } from "lucide-react";
 
 interface CityWeatherData {
   temperature: string | null;
@@ -18,6 +18,7 @@ export default function Home() {
     {}
   );
   const [cities, setCities] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [newCity, setNewCity] = useState("");
   const [isAdding, setIsAdding] = useState(false);
@@ -33,6 +34,8 @@ export default function Home() {
       try {
         const data: SSEData = JSON.parse(event.data);
         setCitiesData(data.cities);
+        // Update cities list from SSE data
+        setCities(Object.keys(data.cities));
       } catch (error) {
         console.error("Error parsing SSE data:", error);
       }
@@ -65,9 +68,14 @@ export default function Home() {
         setNewCity("");
         // Refresh cities list
         fetchCities();
+      } else if (response.status === 404) {
+        alert("City not found. Please check the city name and try again.");
+      } else {
+        alert("Error adding city. Please try again.");
       }
     } catch (error) {
       console.error("Error adding city:", error);
+      alert("Error adding city. Please try again.");
     } finally {
       setIsAdding(false);
     }
@@ -91,6 +99,33 @@ export default function Home() {
     }
   };
 
+  const toggleFavorite = async (city: string) => {
+    const isFavorite = favorites.includes(city);
+    try {
+      const response = await fetch(
+        `http://localhost:8000/favorites${
+          isFavorite ? `/${encodeURIComponent(city)}` : ""
+        }`,
+        {
+          method: isFavorite ? "DELETE" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: isFavorite ? undefined : JSON.stringify({ city }),
+        }
+      );
+
+      if (response.ok) {
+        // Refresh favorites list
+        fetchFavorites();
+        // Also refresh cities to reflect changes
+        fetchCities();
+      }
+    } catch (error) {
+      console.error("Error toggling favorite:", error);
+    }
+  };
+
   const fetchCities = async () => {
     try {
       const response = await fetch("http://localhost:8000/cities");
@@ -103,8 +138,21 @@ export default function Home() {
     }
   };
 
+  const fetchFavorites = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/favorites");
+      if (response.ok) {
+        const data = await response.json();
+        setFavorites(data.favorites);
+      }
+    } catch (error) {
+      console.error("Error fetching favorites:", error);
+    }
+  };
+
   useEffect(() => {
     fetchCities();
+    fetchFavorites();
   }, []);
 
   return (
@@ -160,65 +208,171 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {cities.map((city) => {
-              const cityData = citiesData[city];
-              return (
-                <div key={city} className="relative group">
-                  <Link href={`/city/${encodeURIComponent(city)}`}>
-                    <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 group-hover:scale-105">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                          {city}
-                        </h3>
-                        <Cloud className="w-6 h-6 text-blue-500 group-hover:text-blue-600 transition-colors" />
-                      </div>
+          <div className="space-y-12">
+            {/* Favorite Cities Section */}
+            {favorites.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                  <Star
+                    className="w-6 h-6 text-yellow-500"
+                    fill="currentColor"
+                  />
+                  Favorite Cities
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {cities
+                    .filter((city) => favorites.includes(city))
+                    .map((city) => {
+                      const cityData = citiesData[city];
+                      return (
+                        <div key={city} className="relative group">
+                          <Link href={`/city/${encodeURIComponent(city)}`}>
+                            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 group-hover:scale-105 ring-2 ring-yellow-400">
+                              <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                  {city}
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                  <Cloud className="w-6 h-6 text-blue-500 group-hover:text-blue-600 transition-colors" />
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      toggleFavorite(city);
+                                    }}
+                                    className="w-6 h-6 text-yellow-500 hover:text-yellow-600 transition-colors"
+                                  >
+                                    <Star
+                                      className="w-6 h-6"
+                                      fill="currentColor"
+                                    />
+                                  </button>
+                                </div>
+                              </div>
 
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Thermometer className="w-4 h-4 text-orange-500" />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
-                            Temperature
-                          </span>
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <Thermometer className="w-4 h-4 text-orange-500" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Temperature
+                                  </span>
+                                </div>
+                                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                  {cityData?.temperature
+                                    ? `${cityData.temperature}°C`
+                                    : "--"}
+                                </p>
+
+                                <div className="flex items-center gap-2">
+                                  <Droplets className="w-4 h-4 text-cyan-500" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Humidity
+                                  </span>
+                                </div>
+                                <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                                  {cityData?.humidity
+                                    ? `${cityData.humidity}%`
+                                    : "--"}
+                                </p>
+                              </div>
+
+                              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                  Click for details →
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
                         </div>
-                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {cityData?.temperature
-                            ? `${cityData.temperature}°C`
-                            : "--"}
-                        </p>
-
-                        <div className="flex items-center gap-2">
-                          <Droplets className="w-4 h-4 text-cyan-500" />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
-                            Humidity
-                          </span>
-                        </div>
-                        <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
-                          {cityData?.humidity ? `${cityData.humidity}%` : "--"}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                          Click for details →
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-
-                  {/* Delete Button */}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      removeCity(city);
-                    }}
-                    className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                      );
+                    })}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* Regular Cities Section */}
+            {cities.filter((city) => !favorites.includes(city)).length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+                  <Cloud className="w-6 h-6 text-blue-500" />
+                  Other Cities
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {cities
+                    .filter((city) => !favorites.includes(city))
+                    .map((city) => {
+                      const cityData = citiesData[city];
+                      return (
+                        <div key={city} className="relative group">
+                          <Link href={`/city/${encodeURIComponent(city)}`}>
+                            <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 p-6 group-hover:scale-105">
+                              <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                                  {city}
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                  <Cloud className="w-6 h-6 text-blue-500 group-hover:text-blue-600 transition-colors" />
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      toggleFavorite(city);
+                                    }}
+                                    className="w-6 h-6 text-gray-400 hover:text-yellow-600 transition-colors"
+                                  >
+                                    <Star className="w-6 h-6" fill="none" />
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <Thermometer className="w-4 h-4 text-orange-500" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Temperature
+                                  </span>
+                                </div>
+                                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                  {cityData?.temperature
+                                    ? `${cityData.temperature}°C`
+                                    : "--"}
+                                </p>
+
+                                <div className="flex items-center gap-2">
+                                  <Droplets className="w-4 h-4 text-cyan-500" />
+                                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                                    Humidity
+                                  </span>
+                                </div>
+                                <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                                  {cityData?.humidity
+                                    ? `${cityData.humidity}%`
+                                    : "--"}
+                                </p>
+                              </div>
+
+                              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                  Click for details →
+                                </p>
+                              </div>
+                            </div>
+                          </Link>
+
+                          {/* Delete Button - Only show for non-favorites */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              removeCity(city);
+                            }}
+                            className="absolute -top-2 -right-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
